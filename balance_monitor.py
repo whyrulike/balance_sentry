@@ -15,8 +15,35 @@ class MySentry():
         self.cf = config
         self.balance_dict = {}
         self.redis_cli = RedisClient(host=self.cf["redis"]["host"], port=self.cf["redis"]["port"], password=self.cf["redis"]["password"])
-        self.slack_bot = SlackBot(token=self.cf ["slack"]["slack_bot_token"],channel=self.cf ["slack"]["channel_id"])
+        self.slack_bot = SlackBot(token=self.cf["slack"]["slack_bot_token"], channel=self.cf["slack"]["channel_id"])
 
+
+    def run_as_manager(self):
+        # only for manager mode
+        sentry_list = self.cf["sentry_list"]
+        sentry_status = {}
+
+        while True:
+
+            for s in sentry_list:
+                sentry_status[s] = self.redis_cli.conn.exists(s)
+
+            logger.debug(sentry_status)
+            # msg
+            status_msg = "Sentry report: "
+            for k, v in sentry_status.items():
+
+                if v:
+                    append_msg = f"{k}: online \t"
+                else:
+                    append_msg = f"{k}: offline! \t"
+                    logger.warning("sentry: k not working")
+                status_msg = status_msg + append_msg
+
+
+            logger.debug(status_msg)
+            self.slack_bot.send_message(status_msg)
+            time.sleep(self.cf["interval_in_seconds"])
 
     def run(self):
         while True:
@@ -68,18 +95,14 @@ class MySentry():
 
     def keep_sentry_alive(self):
         key = self.cf["sentry_id"]
-        self.redis_cli.conn.set(key, time.time())
-
-    def run_as_manager(self):
-        # only for manager mode
-
-        pass
-
+        interval_in_seconds = int(self.cf["interval_in_seconds"]) + 2*60
+        self.redis_cli.conn.set(key, time.time(),ex=interval_in_seconds)
 
 
     # check the balance, if reduce，then alert
     @except_output('Check Exception')
     def check_balance(self,base_url, pubkey, key_type):
+        sentry_id = self.cf["sentry_id"]
         suceess = False
 
         delta = None
@@ -102,7 +125,7 @@ class MySentry():
 
                     if -3000000 <= delta < 0:
 
-                        self.slack_bot.send_message(f"type: {key_type} ,key: {key_status}, maybe miss attention !!!")
+                        self.slack_bot.send_message(f"from:{sentry_id},type: {key_type} ,key: {key_status}, maybe miss attention !!!")
                         # maybe miss att
                         # asyncio.run(post_message(f"{key_status}, maybe miss attention !!!") )
 
@@ -111,15 +134,15 @@ class MySentry():
                         logger.warning(f"maybe key auto withdrawl: type: {key_type} ,key: {key_status} ")
 
                     else:
-                        self.slack_bot.send_message(f" type: {key_type} ,key: {key_status},  please pay attention !!!")
-                        self.slack_bot.send_message(f" type: {key_type} ,key: {key_status},  please pay attention !!!")
+                        self.slack_bot.send_message(f"from:{sentry_id}, type: {key_type} ,key: {key_status},  please pay attention !!!")
+                        self.slack_bot.send_message(f"from:{sentry_id}, type: {key_type} ,key: {key_status},  please pay attention !!!")
 
 
             # update balance_dict
             self.balance_dict[pubkey] = int(current_pubkey_balance)
             suceess = True
         else:
-            logger.error(f"Key: {pubkey},Can not request balance!")
+            logger.error(f" from:{sentry_id}, Key: {pubkey},Can not request balance!")
 
         return suceess
 

@@ -1,7 +1,7 @@
 # !/usr/bin/env python3
 
 import redis
-
+from loguru import logger
 #
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -34,10 +34,10 @@ class SlackBot:
                 channel=self.channel,
                 text=message
             )
-            print("Message posted:", response)
+            logger.debug(f"alert Message posted:{response}")
         except SlackApiError as e:
-            print("Error posting message: {}".format(e))
-
+            # print("Error posting message: {}".format(e))
+            logger.debug(f"Error posting message: {e}")
 
 class RedisClient:
     def __init__(self, host='127.0.0.1', port=6379, password='xxx'):
