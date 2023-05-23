@@ -75,16 +75,17 @@ class MySentry():
     @except_output('Request Exception')
     def get_pubkey_balance(self, base_url, validator_index):
         v_balance = None
+        timeout = (2, 3)
         headers = {"Content-Type": "application/json"}
 
-        url = base_url + "/eth/v1/beacon/states/head/validators/" + str(validator_index)
-        r = requests.get(url=url, headers=headers)
+        url = base_url + "/eth/v1/beacon/states/finalized/validators/" + str(validator_index)
+        r = requests.get(url=url, headers=headers, timeout=timeout)
         if r.status_code == 200 and r.text:
             result = json.loads(r.text)
             if "data" in result:
                 if "balance" in result["data"]:
                     v_balance = result["data"]["balance"]
-                    # logger.debug("key:{},,,,balance:{}".format(validator_index, v_balance))
+                    logger.debug("key:{},,,,balance:{}".format(validator_index, v_balance))
         else:
             logger.error("request url err :   {} {}".format(url,r.status_code))
             return None
@@ -96,7 +97,7 @@ class MySentry():
     def keep_sentry_alive(self):
         key = self.cf["sentry_id"]
         interval_in_seconds = int(self.cf["interval_in_seconds"]) + 2*60
-        self.redis_cli.conn.set(key, time.time(),ex=interval_in_seconds)
+        self.redis_cli.conn.set(key, time.time(), ex=interval_in_seconds)
 
 
     # check the balance, if reduce，then alert
@@ -109,7 +110,7 @@ class MySentry():
         current_pubkey_balance = None
 
         current_pubkey_balance = self.get_pubkey_balance(base_url, pubkey)
-        if current_pubkey_balance:
+        if current_pubkey_balance is not None:
             if pubkey not in self.balance_dict:
                 # first push
                 self.balance_dict[pubkey] = int(current_pubkey_balance)
@@ -118,22 +119,22 @@ class MySentry():
                 # pubkey in balance_dict
                 delta = current_pubkey_balance - self.balance_dict[pubkey]
                 key_status = (pubkey, delta)
-                logger.info(key_status)
+                logger.info(f"balance diff: {key_status}")
 
                 if delta < 0:
+                    alert_id = f"{key_type}-{pubkey}"
                     logger.warning("balance deduction occurred! Persistent miss behavior is possible")
 
                     if -3000000 <= delta < 0:
-
+                        logger.error(f"from:{sentry_id},type: {key_type} ,key: {key_status}, maybe miss attention !!!")
                         self.slack_bot.send_message(f"from:{sentry_id},type: {key_type} ,key: {key_status}, maybe miss attention !!!")
-                        # maybe miss att
-                        # asyncio.run(post_message(f"{key_status}, maybe miss attention !!!") )
 
                     elif -1000000000 <= delta < -3000001:
                         # maybe withdrawl
-                        logger.warning(f"maybe key auto withdrawl: type: {key_type} ,key: {key_status} ")
+                        logger.warning(f"maybe key auto withdrawl: type: {key_type} ,key: {key_status}")
 
                     else:
+                        logger.error(f"from:{sentry_id},type: {key_type} ,key: {key_status}, maybe miss attention !!!")
                         self.slack_bot.send_message(f"from:{sentry_id}, type: {key_type} ,key: {key_status},  please pay attention !!!")
                         self.slack_bot.send_message(f"from:{sentry_id}, type: {key_type} ,key: {key_status},  please pay attention !!!")
 
@@ -142,7 +143,7 @@ class MySentry():
             self.balance_dict[pubkey] = int(current_pubkey_balance)
             suceess = True
         else:
-            logger.error(f" from:{sentry_id}, Key: {pubkey},Can not request balance!")
+            logger.error(f" from:{sentry_id}, bad request, Key: {pubkey},Can not request balance!")
 
         return suceess
 
