@@ -2,25 +2,9 @@
 
 import redis
 from loguru import logger
-#
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
-#
-import schedule
 import time
-
-class Scheduler:
-    def __init__(self, interval=1):
-        self.interval = interval
-
-    def run(self):
-        while True:
-            schedule.run_pending()
-            time.sleep(self.interval)
-
-    def schedule_task(self, func, *args, **kwargs):
-        schedule.every(*args, **kwargs).do(func)
-
 
 
 class SlackBot:
@@ -95,6 +79,44 @@ class RedisClient:
             print('Connection broken, attempting to reconnect...')
             self.reconnect()
             return self.conn.smembers(key)
+
+    def hash_set(self,hash_name,key,value):
+
+        try:
+            return self.conn.hset(hash_name,key,value)
+        except redis.exceptions.ConnectionError:
+            print('Connection broken, attempting to reconnect...')
+            self.reconnect()
+            return self.conn.hset(hash_name,key,value)
+
+    def hash_get_all(self,hash_name):
+        # hgetall: Return a Python dict of the hash's name/value pairs
+        try:
+            return self.conn.hgetall(hash_name)
+        except redis.exceptions.ConnectionError:
+            print('Connection broken, attempting to reconnect...')
+            self.reconnect()
+            return self.conn.hgetall(hash_name)
+    
+    def hash_get_all_key(self,hash_name):
+        # hkeys: Return the list of keys within hash ``name``
+        try:
+            return self.conn.hkeys(hash_name)
+        except redis.exceptions.ConnectionError:
+            print('Connection broken, attempting to reconnect...')
+            self.reconnect()
+            return self.conn.hkeys(hash_name)
+        
+    def hash_get_len(self,hash_name):
+        # hlen: Return the number of elements in hash ``name`
+        try:
+            return self.conn.hlen(hash_name)
+        except redis.exceptions.ConnectionError:
+            print('Connection broken, attempting to reconnect...')
+            self.reconnect()
+            return self.conn.hlen(hash_name)
+
+    
 
 
 

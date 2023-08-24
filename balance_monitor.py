@@ -6,7 +6,9 @@ import traceback
 from loguru import logger
 from datetime import datetime
 from functools import wraps
-from myUtils import SlackBot,RedisClient,Scheduler
+from myUtils import SlackBot,RedisClient
+from urllib.parse import urlparse
+
 import yaml
 import argparse
 
@@ -18,10 +20,17 @@ class MySentry():
         self.slack_bot = SlackBot(token=self.cf["slack"]["slack_bot_token"], channel=self.cf["slack"]["channel_id"])
 
 
+
     def run_as_manager(self):
         # only for manager mode
         sentry_list = self.cf["sentry_list"]
+        beacon_base_url = self.cf["beacon_base_url"]
+        #
+        parsed_url = urlparse(beacon_base_url)
+        domain_name = parsed_url.netloc
+
         sentry_status = {}
+
 
         while True:
 
@@ -42,6 +51,7 @@ class MySentry():
 
 
             logger.debug(status_msg)
+            exit(1)
             self.slack_bot.send_message(status_msg)
             time.sleep(self.cf["interval_in_seconds"])
 
@@ -75,7 +85,7 @@ class MySentry():
     @except_output('Request Exception')
     def get_pubkey_balance(self, base_url, validator_index):
         v_balance = None
-        timeout = (2, 3)
+        timeout = (2, 2)
         headers = {"Content-Type": "application/json"}
 
         url = base_url + "/eth/v1/beacon/states/finalized/validators/" + str(validator_index)
@@ -149,14 +159,14 @@ class MySentry():
 
 
     @except_output('job Exception')
-    def balance_job(self, base_url, check_range,step):
+    def balance_job(self, base_url, check_range, step):
 
         for validater_set_type in check_range:
             logger.debug(f"check type: {validater_set_type}")
             # get list from redis
             # undecode_validater_set = self.redis_cli.conn.srandmember(validater_set_type, number=5)
             undecode_validater_set = self.redis_cli.conn.lrange(validater_set_type,0,-1)
-            validater_set = [e.decode() for e in undecode_validater_set]
+            validater_set = [ e.decode() for e in undecode_validater_set ]
 
             if validater_set:
                 # the import step
